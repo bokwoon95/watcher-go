@@ -107,7 +107,6 @@ Flags:
 }
 
 func (cmd *RunCmd) Start() error {
-	const debounceInterval = 500 * time.Millisecond
 	if !atomic.CompareAndSwapInt32(&cmd.started, 0, 1) {
 		return fmt.Errorf("already started")
 	}
@@ -117,13 +116,18 @@ func (cmd *RunCmd) Start() error {
 	if cmd.Stderr == nil {
 		cmd.Stderr = os.Stderr
 	}
+	// Create a temp path for the program by default, unless the user specified
+	// a custom output.
 	cmd.programPath = filepath.Join(os.TempDir(), "main"+time.Now().Format("20060102150405"))
 	if cmd.Output != "" {
 		cmd.programPath = cmd.Output
 	}
+	// Windows refuses to run programs without an .exe extension, add it for
+	// the user if they didn't include it.
 	if runtime.GOOS == "windows" && !strings.HasSuffix(cmd.programPath, ".exe") {
 		cmd.programPath += ".exe"
 	}
+	// watched tracks which dirs are currently present in the watcher.
 	watched := make(map[string]struct{})
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -135,37 +139,45 @@ func (cmd *RunCmd) Start() error {
 	buildArgs = append(buildArgs, cmd.BuildFlags...)
 	buildArgs = append(buildArgs, cmd.Package)
 	var program *exec.Cmd
-	var buildCmd *exec.Cmd
-	var event fsnotify.Event
-	var ok, rebuild bool
-	// Build + Run Loop.
+	// The timer is used to debounce events. When a valid event arrives, it
+	// starts the timer. Only when the timer expires does it actually kick off
+	// a clean + build + run cycle. This means events that come in too quickly
+	// will keep resetting the timer over and over without actually triggering
+	// a rerun (the timer must be allowed to fully expire first).
+	timer := time.NewTimer(0)
+
+	// Clean + Build + Run cycle.
 	for {
-		// Stop program and any child processes.
+		// Clean up the program (if exists) and any child processes.
 		if program != nil {
-			stop(program)
-			_ = os.Remove(cmd.programPath)
+			cleanup(program)
 		}
-		// Set program to nil; it will be non-nil once the buildCmd succeeds.
+		// Set the program to nil; it will be non-nil if buildCmd succeeds
+		// without error.
 		program = nil
-		// Build program.
-		buildCmd = exec.Command("go", buildArgs...)
+		// Build the program (piping its stdout and stderr to cmd.Stdout and
+		// cmd.Stderr).
+		buildCmd := exec.Command("go", buildArgs...)
 		buildCmd.Stdout = cmd.Stdout
 		buildCmd.Stderr = cmd.Stderr
 		err = buildCmd.Run()
 		if err == nil {
-			// Run program.
+			// Run the program in the background (piping its stdout and stderr to
+			// cmd.Stdout and cmd.Stderr).
 			program = exec.Command(cmd.programPath, cmd.Args...)
 			program.Stdout = cmd.Stdout
 			program.Stderr = cmd.Stderr
 			go program.Run()
 		}
-		// Run  Loop.
-		rebuild = false
+		// Wait for file events. When a valid event comes in 'rebuild' will be
+		// set to true, breaking the wait loop and initiating another clean +
+		// build + run cycle.
+		rebuild := false
 		for rebuild == false {
 			select {
 			case err = <-watcher.Errors:
 				fmt.Fprintln(cmd.Stderr, err)
-			case event, ok = <-watcher.Events:
+			case event, ok := <-watcher.Events:
 				if !ok {
 					return nil // cmd.Stop() was called which called watcher.Close().
 				}
@@ -174,20 +186,25 @@ func (cmd *RunCmd) Start() error {
 				}
 				if !isDir(event.Name) {
 					if isValid(cmd.IncludeRegexp, cmd.ExcludeRegexp, event.Name) {
-						fmt.Println(event)
-						rebuild = true
-						break
+						timer.Reset(500 * time.Millisecond) // Start the timer.
 					}
 					continue
 				}
+				// If a directory was created, recursively add every directory
+				// inside it to the watcher.
 				if event.Has(fsnotify.Create) {
 					addDirsRecursively(watcher, watched, event.Name)
 					continue
 				}
+				// If a directory was removed, recursively remove every
+				// directory inside it from the watcher.
 				if event.Has(fsnotify.Remove) {
 					removeDirsRecursively(watcher, watched, event.Name)
 					continue
 				}
+			case <-timer.C: // Timer expired, start the rebuild.
+				rebuild = true
+				break
 			}
 		}
 	}

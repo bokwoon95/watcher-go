@@ -5,7 +5,7 @@ import (
 	"syscall"
 )
 
-func stop(program *exec.Cmd) {
+func cleanup(program *exec.Cmd) {
 	if program.Process == nil {
 		return
 	}
@@ -13,4 +13,5 @@ func stop(program *exec.Cmd) {
 	_ = syscall.Kill(-program.Process.Pid, syscall.SIGKILL)
 	// Wait releases any resources associated with the Process.
 	_, _ = program.Process.Wait()
+	_ = os.Remove(program.Path)
 }
