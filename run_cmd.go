@@ -31,12 +31,13 @@ type RunCmd struct {
 	Stdout        io.Writer
 	Stderr        io.Writer
 	BuildFlags    []string
-	Output        string
+	Output        string // TODO: when I include the -o flag it hangs. Why?
 	Args          []string
 	ExcludeRegexp *regexp.Regexp
 	IncludeRegexp *regexp.Regexp
 	watcher       *fsnotify.Watcher
 	started       int32
+	programPath   string
 }
 
 func RunCommand(args ...string) (*RunCmd, error) {
@@ -116,18 +117,13 @@ func (cmd *RunCmd) Start() error {
 	if cmd.Stderr == nil {
 		cmd.Stderr = os.Stderr
 	}
-	programPath := filepath.Join(os.TempDir(), "main"+time.Now().Format("20060102150405"))
+	cmd.programPath = filepath.Join(os.TempDir(), "main"+time.Now().Format("20060102150405"))
 	if cmd.Output != "" {
-		programPath = cmd.Output
+		cmd.programPath = cmd.Output
 	}
-	if runtime.GOOS == "windows" && !strings.HasSuffix(programPath, ".exe") {
-		programPath += ".exe"
+	if runtime.GOOS == "windows" && !strings.HasSuffix(cmd.programPath, ".exe") {
+		cmd.programPath += ".exe"
 	}
-	defer func() {
-		if programPath != "" && cmd.Output == "" {
-			_ = os.Remove(programPath)
-		}
-	}()
 	watched := make(map[string]struct{})
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -136,7 +132,7 @@ func (cmd *RunCmd) Start() error {
 	addDirsRecursively(watcher, watched, ".")
 	defer watcher.Close()
 	buildArgs := make([]string, 0, len(cmd.BuildFlags)+4)
-	buildArgs = append(buildArgs, "build", "-o", programPath)
+	buildArgs = append(buildArgs, "build", "-o", cmd.programPath)
 	buildArgs = append(buildArgs, cmd.BuildFlags...)
 	buildArgs = append(buildArgs, cmd.Package)
 	var program *exec.Cmd
@@ -148,7 +144,7 @@ func (cmd *RunCmd) Start() error {
 		// Stop program and any child processes.
 		if program != nil {
 			stop(program)
-			_ = os.Remove(programPath)
+			_ = os.Remove(cmd.programPath)
 		}
 		// Set program to nil; it will be non-nil once the buildCmd succeeds.
 		program = nil
@@ -159,7 +155,7 @@ func (cmd *RunCmd) Start() error {
 		err = buildCmd.Run()
 		if err == nil {
 			// Run program.
-			program = exec.Command(programPath, cmd.Args...)
+			program = exec.Command(cmd.programPath, cmd.Args...)
 			program.Stdout = cmd.Stdout
 			program.Stderr = cmd.Stderr
 			go program.Run()
@@ -202,6 +198,7 @@ func (cmd *RunCmd) Stop() {
 	if cmd.watcher != nil {
 		cmd.watcher.Close()
 	}
+	_ = os.Remove(cmd.programPath)
 }
 
 func isDir(path string) bool {
