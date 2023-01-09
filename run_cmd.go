@@ -129,7 +129,7 @@ func (cmd *RunCmd) Start() {
 	if runtime.GOOS == "windows" && !strings.HasSuffix(cmd.programPath, ".exe") {
 		cmd.programPath += ".exe"
 	}
-	// watched tracks which dirs are currently present in the watcher.
+	// 'watched' tracks which dirs are currently present in the watcher.
 	watched := make(map[string]struct{})
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
