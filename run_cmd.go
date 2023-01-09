@@ -137,6 +137,7 @@ func (cmd *RunCmd) Start() {
 		return
 	}
 	addDirsRecursively(watcher, watched, ".")
+	// go build -o <programPath> [BUILD_FLAGS...] <package>
 	buildArgs := make([]string, 0, len(cmd.BuildFlags)+4)
 	buildArgs = append(buildArgs, "build", "-o", cmd.programPath)
 	buildArgs = append(buildArgs, cmd.BuildFlags...)
