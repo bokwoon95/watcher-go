@@ -188,6 +188,8 @@ func (cmd *RunCmd) Start() {
 				if !ok {
 					return // cmd.Stop() was called which called watcher.Close().
 				}
+				// We're only interested in Create | Write | Remove events,
+				// ignore everything else.
 				if !event.Has(fsnotify.Create) && !event.Has(fsnotify.Write) && !event.Has(fsnotify.Remove) {
 					continue
 				}
