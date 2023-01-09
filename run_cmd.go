@@ -138,13 +138,13 @@ func (cmd *RunCmd) Start() error {
 	buildArgs = append(buildArgs, "build", "-o", cmd.programPath)
 	buildArgs = append(buildArgs, cmd.BuildFlags...)
 	buildArgs = append(buildArgs, cmd.Package)
-	var program *exec.Cmd
 	// The timer is used to debounce events. When a valid event arrives, it
 	// starts the timer. Only when the timer expires does it actually kick off
 	// a clean + build + run cycle. This means events that come in too quickly
 	// will keep resetting the timer over and over without actually triggering
 	// a rerun (the timer must be allowed to fully expire first).
 	timer := time.NewTimer(0)
+	var program *exec.Cmd
 
 	// Clean + Build + Run cycle.
 	for {
