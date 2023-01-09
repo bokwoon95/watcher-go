@@ -23,6 +23,7 @@ func cleanup(program *exec.Cmd) {
 }
 
 func setpgid(program *exec.Cmd) {
+	// https://stackoverflow.com/questions/22470193/why-wont-go-kill-a-child-process-correctly
 	program.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 		Setsid: true,

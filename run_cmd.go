@@ -25,15 +25,30 @@ var buildFlags = [...]string{
 	"overlay", "pkgdir", "tags", "trimpath", "toolexec",
 }
 
+// TODO: type BuildCmd struct, which only builds binaries without running. probably useful for people who just want to build the binary and start it up with delve or something https://github.com/cosmtrek/air/issues/365
+// TODO: StartService bool, which checks if the output binary already exists and runs that first (and then waiting on the file even loop). https://github.com/cosmtrek/air/issues/126 Idea is to retain the oldProgramPath, build a new programPath and if it succeeds then run the new programPath and cleanup the oldProgramPath otherwise leave the oldProgramPath running.
+// TODO: PropagateSigint bool, which propagates SIGINT to the underlying binary in a exponential backoff retry loop until it's done or until 10 tries have been up at which point the service is forcibly killed. https://github.com/cosmtrek/air/pull/49 But sometimes people may want a hard cap on the time waited, so provide an option for that as well. With this option it will be possible to use wgo to run servers in production, together with the feature of falling back on the old binary in case the new build fails. https://github.com/cosmtrek/air/issues/129 Do NOT do any SMTP mail handling because build failure notifications is a job for a proper CI/CD system. (Wow people may actually like exponential backoff retry huh if their app takes fucking ages to close down after sigkill. what's the difference between sigkill and sigint and sigterm and sighup? https://github.com/cosmtrek/air/issues/29)
+// TODO: experiment if bash backgroundjobs & can multiplex multiple wgo calls in one stdout. https://github.com/cosmtrek/air/issues/160
+// TODO: add disclaimer saying I don't work with Docker and I dont know shit about virtual filesystems or how fsnotify works so if you file a report I likely can't help you until someone kind enough does.
+// TODO: test if wgo handles port :8080 just fine (and maybe try it on a remote box and see if it's reachable from outside). Since apparently that's what people do on live, they use air to live-compile their codebase on the server so that they can just push and see changes immediately. Means need to try git pulling and seeing if wgo automatically picks it up and recompiles the app. That also means need an option to fall back on the old binary in case the new build fails (can't just os.Remove before building, need a different flow). https://github.com/cosmtrek/air/issues/311
+// TODO: does calling Fatal in an application not free up a port while wgo is running? Should I kill wgo if no build program is running? Liveliness checks? Too much for wgo? https://github.com/cosmtrek/air/issues/116
+// TODO: wtf how is it possible to implement live reload with delve? https://github.com/cosmtrek/air/issues/76
+// TODO: ok fine I'll investigate running in docker https://dev.to/andreidascalu/setup-go-with-vscode-in-docker-for-debugging-24ch
+// TODO: there may come a day where people require reading files from outside the root directory for whatever reason https://github.com/cosmtrek/air/issues/41 (UGH fine, you can have your arbitrary file watching and rebuild server https://github.com/cosmtrek/air/issues/40)
+// TODO: okay, okay. generic project runner? if a file in /assets changes, rebuild using a custom command? https://github.com/cosmtrek/air/issues/14
+// NOTE: NO multiple commands and splicing with colorful sidebars like nodemon! The structure of a wgo run must be simple. Watch files, run server. Or watch files, build program. Or watch files, run arbitrary command. If you need to splice, compose it together using bash's support for background jobs and run multiple wgos in the same session.
 type RunCmd struct {
 	// (Required)
 	Package       string
+	Env           []string  // TODO: write a test to see if env variables passed to wgo are propagated to the program. https://github.com/cosmtrek/air/issues/58 full_bin SUCKS! using the live env vars is better! make sure it works. https://github.com/cosmtrek/air/pull/166 Is it possible to set env vars in one line on windows and pass them in to wgo? https://github.com/cosmtrek/air/issues/338 https://superuser.com/q/1405650 Maybe don't bother with the one line requirement, that is needed for air because it runs a single line command from its config file whereas wgo is able to access the shell in its entirety. If people want to source a dev.env file before running wgo they can (but make sure that works) https://github.com/cosmtrek/air/issues/77
+	Dir string // TODO: reintroduce Dir string so that people can cd to a different directory, watch different files outside the project root and have peace of mind that they are able to run the binary in a completely different directory. https://github.com/cosmtrek/air/issues/85
+	Stdin         io.Reader // TODO: need to test if it is possible to type rs<Enter> on macOS and if so implement nodemon's custom restart command. https://github.com/cosmtrek/air/issues/351
 	Stdout        io.Writer
 	Stderr        io.Writer
 	BuildFlags    []string
 	Output        string // TODO: when I include the -o flag it hangs. Why?
 	Args          []string
-	ExcludeRegexp *regexp.Regexp // TODO: Exclude and Include don't seem to work.
+	ExcludeRegexp *regexp.Regexp // TODO: Exclude and Include don't seem to work. Figure out how to get multiple specific directories to work. Figure out how to only watch files in the root folder nonrecursively. There may come a time where *.{go,html,tmpl,tpl} is no longer a sane default and users are often asking for css,js, or even more madness. Or even a general purpose task runner. But stay strong, because wgo run never seeks to achieve what go run couldn't already (it simply adds a file watcher to go run).
 	IncludeRegexp *regexp.Regexp
 	watcher       *fsnotify.Watcher
 	started       int32
@@ -112,6 +127,12 @@ func (cmd *RunCmd) Start() {
 	if !atomic.CompareAndSwapInt32(&cmd.started, 0, 1) {
 		return
 	}
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	if cmd.Stdin == nil {
+		cmd.Stdin = os.Stdin
+	}
 	if cmd.Stdout == nil {
 		cmd.Stdout = os.Stdout
 	}
@@ -165,6 +186,7 @@ func (cmd *RunCmd) Start() {
 		// Build the program (piping its stdout and stderr to cmd.Stdout and
 		// cmd.Stderr).
 		buildCmd := exec.Command("go", buildArgs...)
+		buildCmd.Env = cmd.Env
 		buildCmd.Stdout = cmd.Stdout
 		buildCmd.Stderr = cmd.Stderr
 		err = buildCmd.Run()
@@ -172,9 +194,11 @@ func (cmd *RunCmd) Start() {
 			// Run the program in the background (piping its stdout and stderr to
 			// cmd.Stdout and cmd.Stderr).
 			program = exec.Command(cmd.programPath, cmd.Args...)
-			setpgid(program)
+			program.Env = cmd.Env
+			program.Stdin = cmd.Stdin
 			program.Stdout = cmd.Stdout
 			program.Stderr = cmd.Stderr
+			setpgid(program)
 			go program.Run()
 		}
 		// Wait for file events. When a valid event comes in 'rebuild' will be
