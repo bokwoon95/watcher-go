@@ -39,7 +39,7 @@ var buildFlags = [...]string{
 // NOTE: NO multiple commands and splicing with colorful sidebars like nodemon! The structure of a wgo run must be simple. Watch files, run server. Or watch files, build program. Or watch files, run arbitrary command. If you need to splice, compose it together using bash's support for background jobs and run multiple wgos in the same session.
 // TODO: figure out how to use wgo in Dockerfile + Docker Compose https://github.com/cosmtrek/air/issues/54
 // TODO: use CommandContext and runCmd.Stop() should propogate cancellation to underlying build and run commands https://github.com/cosmtrek/air/issues/127
-// TODO: probably add a wgo dlv to rerun dlv on file change. need to figure out how dlv runs headlessly and how clients connect to it (which clients? goland?) https://github.com/cosmtrek/air/issues/216#issuecomment-982348931
+// TODO: probably add a wgo dlv to rerun dlv on file change. need to figure out how dlv runs headlessly and how clients connect to it (which clients? goland?) https://github.com/cosmtrek/air/issues/216#issuecomment-982348931 (https://github.com/cosmtrek/air/issues/241)
 // NOTE: There's a fine line between what wgo does and what nodemon does. wgo is as convenient as it is because it knows/can control the output programPath to run with for the Go language. But other task runners usually require running a custom command. Maybe wgo watch [FLAGS...] <path> -- <command> [ARGS...]? What about using stdin to pipe in a newline separated list of files? Don't ask users to fuck around with esoteric find flags?
 type RunCmd struct {
 	// (Required)
