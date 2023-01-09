@@ -106,6 +106,7 @@ Flags:
 }
 
 func (cmd *RunCmd) Start() error {
+	const debounceInterval = 500 * time.Millisecond
 	if !atomic.CompareAndSwapInt32(&cmd.started, 0, 1) {
 		return fmt.Errorf("already started")
 	}
@@ -140,6 +141,8 @@ func (cmd *RunCmd) Start() error {
 	buildArgs = append(buildArgs, cmd.Package)
 	var program *exec.Cmd
 	var buildCmd *exec.Cmd
+	var event fsnotify.Event
+	var ok, rebuild bool
 	// Build + Run Loop.
 	for {
 		// Stop program and any child processes.
@@ -162,21 +165,21 @@ func (cmd *RunCmd) Start() error {
 			go program.Run()
 		}
 		// Run  Loop.
-		rebuild := false
+		rebuild = false
 		for rebuild == false {
 			select {
-			case err := <-watcher.Errors:
+			case err = <-watcher.Errors:
 				fmt.Fprintln(cmd.Stderr, err)
-				continue
-			case event, ok := <-watcher.Events:
+			case event, ok = <-watcher.Events:
 				if !ok {
-					return nil // watcher.Close() was called.
+					return nil // cmd.Stop() was called which called watcher.Close().
 				}
 				if !event.Has(fsnotify.Create) && !event.Has(fsnotify.Write) && !event.Has(fsnotify.Remove) {
 					continue
 				}
 				if !isDir(event.Name) {
 					if isValid(cmd.IncludeRegexp, cmd.ExcludeRegexp, event.Name) {
+						fmt.Println(event)
 						rebuild = true
 						break
 					}

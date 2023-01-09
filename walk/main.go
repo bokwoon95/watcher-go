@@ -11,7 +11,7 @@ func main() {
 		if path != "" && path[0] == '.' {
 			return nil
 		}
-		fmt.Println(path)
+		fmt.Println(path, "shiny baban")
 		return nil
 	})
 }
