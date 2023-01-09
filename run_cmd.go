@@ -194,10 +194,13 @@ func (cmd *RunCmd) Start() error {
 }
 
 func (cmd *RunCmd) Stop() {
+	if atomic.LoadInt32(&cmd.started) == 0 {
+		return
+	}
 	if cmd.watcher != nil {
 		_ = cmd.watcher.Close()
 	}
-	if atomic.LoadInt32(&cmd.started) == 1 && cmd.programPath != "" {
+	if cmd.programPath != "" {
 		_ = os.Remove(cmd.programPath)
 	}
 }
