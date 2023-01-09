@@ -116,6 +116,7 @@ func (cmd *RunCmd) Run() error {
 	buildArgs = append(buildArgs, cmd.BuildFlags...)
 	buildArgs = append(buildArgs, cmd.Package)
 	var runCmd *exec.Cmd
+
 	for {
 		// kill cmd
 		if runCmd != nil {

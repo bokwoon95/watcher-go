@@ -6,12 +6,6 @@ import (
 	"strconv"
 )
 
-func kill(runCmd *exec.Cmd) error {
-	// https://stackoverflow.com/a/44551450
-	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(runCmd.Process.Pid))
-	return kill.Run()
-}
-
 func newRunCmd(name string, args ...string) (runCmd *exec.Cmd, stdout, stderr io.ReadCloser, err error) {
 	runCmd = exec.Command(name, args...)
 	stdout, err = runCmd.StdoutPipe()
@@ -27,4 +21,10 @@ func newRunCmd(name string, args ...string) (runCmd *exec.Cmd, stdout, stderr io
 		return nil, nil, nil, err
 	}
 	return runCmd, stdout, stderr, err
+}
+
+func kill(runCmd *exec.Cmd) error {
+	// https://stackoverflow.com/a/44551450
+	kill := exec.Command("TASKKILL", "/T", "/F", "/PID", strconv.Itoa(runCmd.Process.Pid))
+	return kill.Run()
 }
