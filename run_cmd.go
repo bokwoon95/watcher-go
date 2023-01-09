@@ -195,7 +195,7 @@ func (cmd *RunCmd) Start() error {
 
 func (cmd *RunCmd) Stop() {
 	if cmd.watcher != nil {
-		cmd.watcher.Close()
+		_ = cmd.watcher.Close()
 	}
 	_ = os.Remove(cmd.programPath)
 }
