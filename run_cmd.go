@@ -197,7 +197,9 @@ func (cmd *RunCmd) Stop() {
 	if cmd.watcher != nil {
 		_ = cmd.watcher.Close()
 	}
-	_ = os.Remove(cmd.programPath)
+	if atomic.LoadInt32(&cmd.started) == 1 && cmd.programPath != "" {
+		_ = os.Remove(cmd.programPath)
+	}
 }
 
 func isDir(path string) bool {
