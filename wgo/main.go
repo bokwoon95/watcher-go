@@ -34,14 +34,13 @@ func main() {
 	case "run":
 		runCmd, err := wgo.RunCommand(args...)
 		if err != nil {
-			exit(cmd, err)
-		}
-		go func() {
-			err := runCmd.Start()
-			if err != nil {
-				fmt.Println(err)
+			if errors.Is(err, flag.ErrHelp) {
+				os.Exit(0)
 			}
-		}()
+			fmt.Fprintln(os.Stderr, cmd+": "+err.Error())
+			os.Exit(1)
+		}
+		go runCmd.Start()
 		<-sigs
 		runCmd.Stop()
 	default:
@@ -49,12 +48,4 @@ func main() {
 		fmt.Println("Run 'wgo' for usage.")
 		os.Exit(1)
 	}
-}
-
-func exit(cmd string, err error) {
-	if errors.Is(err, flag.ErrHelp) {
-		os.Exit(0)
-	}
-	fmt.Fprintln(os.Stderr, cmd+": "+err.Error())
-	os.Exit(1)
 }

@@ -33,7 +33,7 @@ type RunCmd struct {
 	BuildFlags    []string
 	Output        string // TODO: when I include the -o flag it hangs. Why?
 	Args          []string
-	ExcludeRegexp *regexp.Regexp
+	ExcludeRegexp *regexp.Regexp // TODO: Exclude and Include don't seem to work.
 	IncludeRegexp *regexp.Regexp
 	watcher       *fsnotify.Watcher
 	started       int32
@@ -106,9 +106,10 @@ Flags:
 	return &cmd, nil
 }
 
-func (cmd *RunCmd) Start() error {
+func (cmd *RunCmd) Start() {
+	// No-op if Start() is called more than once.
 	if !atomic.CompareAndSwapInt32(&cmd.started, 0, 1) {
-		return fmt.Errorf("already started")
+		return
 	}
 	if cmd.Stdout == nil {
 		cmd.Stdout = os.Stdout
@@ -131,7 +132,8 @@ func (cmd *RunCmd) Start() error {
 	watched := make(map[string]struct{})
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return err
+		fmt.Fprintln(cmd.Stderr, err)
+		return
 	}
 	addDirsRecursively(watcher, watched, ".")
 	buildArgs := make([]string, 0, len(cmd.BuildFlags)+4)
@@ -144,6 +146,9 @@ func (cmd *RunCmd) Start() error {
 	// will keep resetting the timer over and over without actually triggering
 	// a rerun (the timer must be allowed to fully expire first).
 	timer := time.NewTimer(0)
+	// Drain the first timer event so that it doesn't count to the first
+	// iteration of the for-select loop.
+	<-timer.C
 	var program *exec.Cmd
 
 	// Clean + Build + Run cycle.
@@ -179,7 +184,7 @@ func (cmd *RunCmd) Start() error {
 				fmt.Fprintln(cmd.Stderr, err)
 			case event, ok := <-watcher.Events:
 				if !ok {
-					return nil // cmd.Stop() was called which called watcher.Close().
+					return // cmd.Stop() was called which called watcher.Close().
 				}
 				if !event.Has(fsnotify.Create) && !event.Has(fsnotify.Write) && !event.Has(fsnotify.Remove) {
 					continue
@@ -211,6 +216,7 @@ func (cmd *RunCmd) Start() error {
 }
 
 func (cmd *RunCmd) Stop() {
+	// No-op if Start() hasn't been called.
 	if atomic.LoadInt32(&cmd.started) == 0 {
 		return
 	}
