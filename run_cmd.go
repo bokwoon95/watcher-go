@@ -130,7 +130,6 @@ func (cmd *RunCmd) Start() error {
 		return err
 	}
 	addDirsRecursively(watcher, watched, ".")
-	defer watcher.Close()
 	buildArgs := make([]string, 0, len(cmd.BuildFlags)+4)
 	buildArgs = append(buildArgs, "build", "-o", cmd.programPath)
 	buildArgs = append(buildArgs, cmd.BuildFlags...)
