@@ -148,7 +148,7 @@ func (cmd *RunCmd) Start() {
 	// will keep resetting the timer over and over without actually triggering
 	// a rerun (the timer must be allowed to fully expire first).
 	timer := time.NewTimer(0)
-	// Drain the first timer event so that it doesn't count to the first
+	// Drain the initial timer event so that it doesn't count to the first
 	// iteration of the for-select loop.
 	<-timer.C
 	var program *exec.Cmd
