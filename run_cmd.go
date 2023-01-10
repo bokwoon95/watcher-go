@@ -52,7 +52,7 @@ type RunCmd struct {
 	Stderr                 io.Writer
 	BuildFlags             []string
 	Output                 string // TODO: when I include the -o flag it hangs. Why?
-	Args                   []string
+	Args                   []string // TODO: oh hell no, go run uses -- as the args separator. Need to rearchitect the application already.
 	DirRegexps             []*regexp.Regexp // TODO: Exclude and Include don't seem to work. Figure out how to get multiple specific directories to work. Figure out how to only watch files in the root folder nonrecursively. There may come a time where *.{go,html,tmpl,tpl} is no longer a sane default and users are often asking for css,js, or even more madness. Or even a general purpose task runner. But stay strong, because wgo run never seeks to achieve what go run couldn't already (it simply adds a file watcher to go run). (Are regexes rich enough to support omitting *_test.go? https://github.com/cosmtrek/air/issues/127)
 	FileRegexps            []*regexp.Regexp
 	FilepathRegexps        []*regexp.Regexp // TODO: normalize all filepath separators to forward slash.
