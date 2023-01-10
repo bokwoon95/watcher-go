@@ -267,7 +267,7 @@ func (cmd *RunCmd) Stop() {
 	}
 }
 
-func escapeDot(pattern string) string {
+func backslashDot(pattern string) string {
 	n := strings.Count(pattern, ".")
 	if n == 0 {
 		return pattern
