@@ -297,30 +297,6 @@ func (cmd *RunCmd) Stop() {
 	}
 }
 
-// TODO: deprecate.
-func backslashDot(pattern string) string {
-	n := strings.Count(pattern, ".")
-	if n == 0 {
-		return pattern
-	}
-	var b strings.Builder
-	b.Grow(len(pattern) + n)
-	var prev, curr, next rune
-	i, width := 0, 0
-	for i < len(pattern) {
-		prev, _ = utf8.DecodeLastRuneInString(b.String())
-		curr, width = utf8.DecodeRuneInString(pattern[i:])
-		next, _ = utf8.DecodeRuneInString(pattern[i+width:])
-		i += width
-		if prev != '\\' && curr == '.' && (('a' <= next && next <= 'z') || ('A' <= next && next <= 'Z')) {
-			b.WriteString("\\.")
-		} else {
-			b.WriteRune(curr)
-		}
-	}
-	return b.String()
-}
-
 func compileRegexps(patterns []string) ([]*regexp.Regexp, error) {
 	if len(patterns) == 0 {
 		return nil, nil
@@ -373,18 +349,15 @@ func isValid(fileRegexps, filepathRegexps, excludeFileRegexps, excludeFilepathRe
 			return false
 		}
 	}
-	if len(fileRegexps) > 0 || len(filepathRegexps) > 0 {
-		for _, r := range fileRegexps {
-			if r.MatchString(basename) {
-				return true
-			}
+	for _, r := range fileRegexps {
+		if r.MatchString(basename) {
+			return true
 		}
-		for _, r := range filepathRegexps {
-			if r.MatchString(normalizedPath) {
-				return true
-			}
+	}
+	for _, r := range filepathRegexps {
+		if r.MatchString(normalizedPath) {
+			return true
 		}
-		return false
 	}
 	if strings.HasSuffix(path, ".go") {
 		return true
