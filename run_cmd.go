@@ -208,6 +208,12 @@ func (cmd *RunCmd) Start() {
 	// a clean + build + run cycle. This means events that come in too quickly
 	// will keep resetting the timer over and over without actually triggering
 	// a rerun (the timer must be allowed to fully expire first).
+	// TODO: after the debouncing, maybe we need an intermediary channel that
+	// does non-blocking sends in order to purposely drop events while the
+	// build command is running so that we don't receive a glut of backed-up
+	// events once the build command is over. But need to investigate if needed
+	// first, because if everything seems to work without that intermediary
+	// channel I'd rather not add it.
 	timer := time.NewTimer(0)
 	// Drain the initial timer event so that it doesn't count to the first
 	// iteration of the for-select loop.
