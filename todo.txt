@@ -1,0 +1,37 @@
+type BuildCmd struct (https://github.com/cosmtrek/air/issues/365)
+
+wgo ls -include ... -exclude ... # print watched files and dirs
+
+dlv --listen=:2345 --headless=true --api-version=2 exec ./myApp
+
+on file change, run a battery of test commands
+
+Powershell run multiple commands and print to console:
+Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList a, b, c;
+Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList d, e, f;
+
+Bash run multiple commands and print to console:
+wgo a b c &;
+wgo d e f &;
+
+wgo -include '\.go$' -exclude 'node_modules'
+
+-dir
+-file
+-filepath
+-xdir
+-xfile
+-xfilepath
+
+-xdir 'node_modules'
+
+-xdir '.idea'
+
+-file .go -file .html -file
+
+-file .js$
+-xdir node_modules$
+
+only root files: -xfilepath '.*/.*'
+-xfilepath / -file .go -file .html
+-xfile _test.go$

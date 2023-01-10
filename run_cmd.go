@@ -25,7 +25,6 @@ var buildFlags = [...]string{
 	"overlay", "pkgdir", "tags", "trimpath", "toolexec",
 }
 
-// TODO: type BuildCmd struct, which only builds binaries without running. probably useful for people who just want to build the binary and start it up with delve or something https://github.com/cosmtrek/air/issues/365
 // TODO: StartService bool, which checks if the output binary already exists and runs that first (and then waiting on the file even loop). https://github.com/cosmtrek/air/issues/126 Idea is to retain the oldProgramPath, build a new programPath and if it succeeds then run the new programPath and cleanup the oldProgramPath otherwise leave the oldProgramPath running.
 // TODO: PropagateSigint bool, which propagates SIGINT to the underlying binary in a exponential backoff retry loop until it's done or until 10 tries have been up at which point the service is forcibly killed. https://github.com/cosmtrek/air/pull/49 But sometimes people may want a hard cap on the time waited, so provide an option for that as well. With this option it will be possible to use wgo to run servers in production, together with the feature of falling back on the old binary in case the new build fails. https://github.com/cosmtrek/air/issues/129 Do NOT do any SMTP mail handling because build failure notifications is a job for a proper CI/CD system. (Wow people may actually like exponential backoff retry huh if their app takes fucking ages to close down after sigkill. what's the difference between sigkill and sigint and sigterm and sighup? https://github.com/cosmtrek/air/issues/29)
 // TODO: experiment if bash backgroundjobs & can multiplex multiple wgo calls in one stdout. https://github.com/cosmtrek/air/issues/160
@@ -43,31 +42,39 @@ var buildFlags = [...]string{
 // NOTE: There's a fine line between what wgo does and what nodemon does. wgo is as convenient as it is because it knows/can control the output programPath to run with for the Go language. But other task runners usually require running a custom command. Maybe wgo watch [FLAGS...] <path> -- <command> [ARGS...]? What about using stdin to pipe in a newline separated list of files? Don't ask users to fuck around with esoteric find flags?
 type RunCmd struct {
 	// (Required)
-	Package       string
-	Env           []string  // TODO: write a test to see if env variables passed to wgo are propagated to the program. https://github.com/cosmtrek/air/issues/58 full_bin SUCKS! using the live env vars is better! make sure it works. https://github.com/cosmtrek/air/pull/166 Is it possible to set env vars in one line on windows and pass them in to wgo? https://github.com/cosmtrek/air/issues/338 https://superuser.com/q/1405650 Maybe don't bother with the one line requirement, that is needed for air because it runs a single line command from its config file whereas wgo is able to access the shell in its entirety. If people want to source a dev.env file before running wgo they can (but make sure that works) https://github.com/cosmtrek/air/issues/77
-	Dir string // TODO: reintroduce Dir string so that people can cd to a different directory, watch different files outside the project root and have peace of mind that they are able to run the binary in a completely different directory. https://github.com/cosmtrek/air/issues/85
-	Stdin         io.Reader // TODO: need to test if it is possible to type rs<Enter> on macOS and if so implement nodemon's custom restart command. https://github.com/cosmtrek/air/issues/351
-	Stdout        io.Writer
-	Stderr        io.Writer
-	BuildFlags    []string
-	Output        string // TODO: when I include the -o flag it hangs. Why?
-	Args          []string
-	ExcludeRegexp *regexp.Regexp // TODO: Exclude and Include don't seem to work. Figure out how to get multiple specific directories to work. Figure out how to only watch files in the root folder nonrecursively. There may come a time where *.{go,html,tmpl,tpl} is no longer a sane default and users are often asking for css,js, or even more madness. Or even a general purpose task runner. But stay strong, because wgo run never seeks to achieve what go run couldn't already (it simply adds a file watcher to go run). (Are regexes rich enough to support omitting *_test.go? https://github.com/cosmtrek/air/issues/127)
-	IncludeRegexp *regexp.Regexp
-	watcher       *fsnotify.Watcher
-	started       int32
-	programPath   string
+	Package                string
+	Env                    []string  // TODO: write a test to see if env variables passed to wgo are propagated to the program. https://github.com/cosmtrek/air/issues/58 full_bin SUCKS! using the live env vars is better! make sure it works. https://github.com/cosmtrek/air/pull/166 Is it possible to set env vars in one line on windows and pass them in to wgo? https://github.com/cosmtrek/air/issues/338 https://superuser.com/q/1405650 Maybe don't bother with the one line requirement, that is needed for air because it runs a single line command from its config file whereas wgo is able to access the shell in its entirety. If people want to source a dev.env file before running wgo they can (but make sure that works) https://github.com/cosmtrek/air/issues/77
+	Dir                    string    // TODO: reintroduce Dir string so that people can cd to a different directory, watch different files outside the project root and have peace of mind that they are able to run the binary in a completely different directory. https://github.com/cosmtrek/air/issues/85
+	Stdin                  io.Reader // TODO: need to test if it is possible to type rs<Enter> on macOS and if so implement nodemon's custom restart command. https://github.com/cosmtrek/air/issues/351
+	Stdout                 io.Writer
+	Stderr                 io.Writer
+	BuildFlags             []string
+	Output                 string // TODO: when I include the -o flag it hangs. Why?
+	Args                   []string
+	DirRegexps             []*regexp.Regexp // TODO: Exclude and Include don't seem to work. Figure out how to get multiple specific directories to work. Figure out how to only watch files in the root folder nonrecursively. There may come a time where *.{go,html,tmpl,tpl} is no longer a sane default and users are often asking for css,js, or even more madness. Or even a general purpose task runner. But stay strong, because wgo run never seeks to achieve what go run couldn't already (it simply adds a file watcher to go run). (Are regexes rich enough to support omitting *_test.go? https://github.com/cosmtrek/air/issues/127)
+	FileRegexps            []*regexp.Regexp
+	FilepathRegexps        []*regexp.Regexp // TODO: normalize all filepath separators to forward slash.
+	ExcludeDirRegexps      []*regexp.Regexp
+	ExcludeFileRegexps     []*regexp.Regexp
+	ExcludeFilepathRegexps []*regexp.Regexp
+	watcher                *fsnotify.Watcher
+	started                int32
+	programPath            string
 }
 
 func RunCommand(args ...string) (*RunCmd, error) {
 	cmd := RunCmd{
 		BuildFlags: make([]string, 0, len(buildFlags)*2),
 	}
-	var include, exclude string
+	var dir, file, filepath, xdir, xfile, xfilepath string
 	flagset := flag.NewFlagSet("", flag.ContinueOnError)
 	flagset.StringVar(&cmd.Output, "o", "", "The -o flag in go build.")
-	flagset.StringVar(&exclude, "exclude", "", "Regexp that matches excluded files.")
-	flagset.StringVar(&include, "include", "", "Regexp that matches included files.")
+	flagset.StringVar(&dir, "dir", "", "")
+	flagset.StringVar(&file, "file", "", "")
+	flagset.StringVar(&filepath, "filepath", "", "")
+	flagset.StringVar(&xdir, "xdir", "", "")
+	flagset.StringVar(&xfile, "xfile", "", "")
+	flagset.StringVar(&xfilepath, "xfilepath", "", "")
 	for i := range buildFlags {
 		name := buildFlags[i]
 		flagset.Func(name, "The -"+name+" flag in go build.", func(value string) error {
@@ -109,6 +116,8 @@ Flags:
 	if len(flagArgs) == 0 {
 		return nil, fmt.Errorf("package or file not provided")
 	}
+	if dir != "" {
+	}
 	if exclude != "" {
 		cmd.ExcludeRegexp, err = regexp.Compile(exclude)
 		if err != nil {
@@ -130,9 +139,6 @@ func (cmd *RunCmd) Start() {
 	// to Start().
 	if !atomic.CompareAndSwapInt32(&cmd.started, 0, 1) {
 		return
-	}
-	if cmd.Env == nil {
-		cmd.Env = os.Environ()
 	}
 	if cmd.Stdin == nil {
 		cmd.Stdin = os.Stdin
@@ -161,7 +167,7 @@ func (cmd *RunCmd) Start() {
 		fmt.Fprintln(cmd.Stderr, err)
 		return
 	}
-	addDirsRecursively(watcher, watched, ".")
+	addDirsRecursively(watcher, watched, cmd.DirRegexps, cmd.ExcludeDirRegexps, ".")
 	// go build -o <programPath> [BUILD_FLAGS...] <package>
 	buildArgs := make([]string, 0, len(cmd.BuildFlags)+4)
 	buildArgs = append(buildArgs, "build", "-o", cmd.programPath)
@@ -223,7 +229,7 @@ func (cmd *RunCmd) Start() {
 					continue
 				}
 				if !isDir(event.Name) {
-					if isValid(cmd.IncludeRegexp, cmd.ExcludeRegexp, event.Name) {
+					if isValid(cmd.FileRegexps, cmd.FilepathRegexps, cmd.ExcludeFileRegexps, cmd.ExcludeFilepathRegexps, event.Name) {
 						timer.Reset(500 * time.Millisecond) // Start the timer.
 					}
 					continue
@@ -231,7 +237,7 @@ func (cmd *RunCmd) Start() {
 				// If a directory was created, recursively add every directory
 				// inside it to the watcher.
 				if event.Has(fsnotify.Create) {
-					addDirsRecursively(watcher, watched, event.Name)
+					addDirsRecursively(watcher, watched, cmd.DirRegexps, cmd.ExcludeDirRegexps, event.Name)
 					continue
 				}
 				// If a directory was removed, recursively remove every
@@ -261,6 +267,17 @@ func (cmd *RunCmd) Stop() {
 	}
 }
 
+func escapeDot(pattern string) string {
+	n := strings.Count(pattern, ".")
+	if n == 0 {
+		return pattern
+	}
+	var b strings.Builder
+	b.Grow(n)
+	for i, w := 0, 0; i < len(pattern); i += w {
+	}
+}
+
 func isDir(path string) bool {
 	fileinfo, err := os.Stat(path)
 	if err != nil {
@@ -269,27 +286,40 @@ func isDir(path string) bool {
 	return fileinfo.IsDir()
 }
 
-func isValid(exclude, include *regexp.Regexp, path string) bool {
-	if exclude != nil && exclude.MatchString(path) {
-		return false
+func isValid(fileRegexps, filepathRegexps, excludeFileRegexps, excludeFilepathRegexps []*regexp.Regexp, path string) bool {
+	basename := filepath.Base(path)
+	normalizedPath := filepath.ToSlash(path)
+	for _, r := range excludeFileRegexps {
+		if r.MatchString(basename) {
+			return false
+		}
 	}
-	if include != nil {
-		if include.MatchString(path) {
-			return true
+	for _, r := range excludeFilepathRegexps {
+		if r.MatchString(normalizedPath) {
+			return false
+		}
+	}
+	if len(fileRegexps) > 0 || len(filepathRegexps) > 0 {
+		for _, r := range fileRegexps {
+			if r.MatchString(basename) {
+				return true
+			}
+		}
+		for _, r := range filepathRegexps {
+			if r.MatchString(normalizedPath) {
+				return true
+			}
 		}
 		return false
 	}
-	if strings.HasPrefix(path, ".") {
-		return false
-	}
-	ext := filepath.Ext(path)
-	if ext == ".go" || ext == ".html" || ext == ".tmpl" || ext == ".tpl" {
+	if strings.HasSuffix(path, ".go") {
 		return true
 	}
 	return false
 }
 
-func addDirsRecursively(watcher *fsnotify.Watcher, watched map[string]struct{}, dir string) {
+// TODO: check if newly added directories are watched (as well as their subdirectories).
+func addDirsRecursively(watcher *fsnotify.Watcher, watched map[string]struct{}, dirRegexps, excludeDirRegexps []*regexp.Regexp, dir string) {
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -300,6 +330,24 @@ func addDirsRecursively(watcher *fsnotify.Watcher, watched map[string]struct{}, 
 		if _, ok := watched[path]; ok {
 			return nil
 		}
+		basename := filepath.Base(path)
+		for _, r := range excludeDirRegexps {
+			if r.MatchString(basename) {
+				return filepath.SkipDir
+			}
+		}
+		if len(dirRegexps) > 0 {
+			matched := false
+			for _, r := range dirRegexps {
+				if r.MatchString(basename) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return nil
+			}
+		}
 		err = watcher.Add(path)
 		if err == nil {
 			watched[path] = struct{}{}
@@ -308,6 +356,7 @@ func addDirsRecursively(watcher *fsnotify.Watcher, watched map[string]struct{}, 
 	})
 }
 
+// TODO: check if newly removed directories are removed (as well as their subdirectories).
 func removeDirsRecursively(watcher *fsnotify.Watcher, watched map[string]struct{}, dir string) {
 	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
