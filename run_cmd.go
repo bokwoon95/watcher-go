@@ -1,6 +1,7 @@
 package wgo
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -66,15 +68,33 @@ func RunCommand(args ...string) (*RunCmd, error) {
 	cmd := RunCmd{
 		BuildFlags: make([]string, 0, len(buildFlags)*2),
 	}
-	var dir, file, filepath, xdir, xfile, xfilepath string
+	var dirs, files, filepaths, xdirs, xfiles, xfilepaths []string
 	flagset := flag.NewFlagSet("", flag.ContinueOnError)
-	flagset.StringVar(&cmd.Output, "o", "", "The -o flag in go build.")
-	flagset.StringVar(&dir, "dir", "", "")
-	flagset.StringVar(&file, "file", "", "")
-	flagset.StringVar(&filepath, "filepath", "", "")
-	flagset.StringVar(&xdir, "xdir", "", "")
-	flagset.StringVar(&xfile, "xfile", "", "")
-	flagset.StringVar(&xfilepath, "xfilepath", "", "")
+	flagset.StringVar(&cmd.Output, "o", "", "")
+	flagset.Func("dir", "", func(value string) error {
+		dirs = append(dirs, value)
+		return nil
+	})
+	flagset.Func("files", "", func(value string) error {
+		files = append(files, value)
+		return nil
+	})
+	flagset.Func("filepaths", "", func(value string) error {
+		filepaths = append(filepaths, value)
+		return nil
+	})
+	flagset.Func("xdirs", "", func(value string) error {
+		xdirs = append(xdirs, value)
+		return nil
+	})
+	flagset.Func("xfiles", "", func(value string) error {
+		xfiles = append(xfiles, value)
+		return nil
+	})
+	flagset.Func("xfilepaths", "", func(value string) error {
+		xfilepaths = append(xfilepaths, value)
+		return nil
+	})
 	for i := range buildFlags {
 		name := buildFlags[i]
 		flagset.Func(name, "The -"+name+" flag in go build.", func(value string) error {
@@ -112,23 +132,33 @@ Flags:
 	if err != nil {
 		return nil, err
 	}
+	cmd.DirRegexps, err = compileRegexps(dirs)
+	if err != nil {
+		return nil, err
+	}
+	cmd.FileRegexps, err = compileRegexps(files)
+	if err != nil {
+		return nil, err
+	}
+	cmd.FilepathRegexps, err = compileRegexps(filepaths)
+	if err != nil {
+		return nil, err
+	}
+	cmd.ExcludeDirRegexps, err = compileRegexps(xdirs)
+	if err != nil {
+		return nil, err
+	}
+	cmd.ExcludeFileRegexps, err = compileRegexps(xfiles)
+	if err != nil {
+		return nil, err
+	}
+	cmd.ExcludeFilepathRegexps, err = compileRegexps(xfilepaths)
+	if err != nil {
+		return nil, err
+	}
 	flagArgs := flagset.Args()
 	if len(flagArgs) == 0 {
 		return nil, fmt.Errorf("package or file not provided")
-	}
-	if dir != "" {
-	}
-	if exclude != "" {
-		cmd.ExcludeRegexp, err = regexp.Compile(exclude)
-		if err != nil {
-			return nil, fmt.Errorf("-exclude %q: %s", exclude, err)
-		}
-	}
-	if include != "" {
-		cmd.IncludeRegexp, err = regexp.Compile(include)
-		if err != nil {
-			return nil, fmt.Errorf("-include %q: %s", include, err)
-		}
 	}
 	cmd.Package, cmd.Args = flagArgs[0], flagArgs[1:]
 	return &cmd, nil
@@ -267,15 +297,59 @@ func (cmd *RunCmd) Stop() {
 	}
 }
 
+// TODO: deprecate.
 func backslashDot(pattern string) string {
 	n := strings.Count(pattern, ".")
 	if n == 0 {
 		return pattern
 	}
 	var b strings.Builder
-	b.Grow(n)
-	for i, w := 0, 0; i < len(pattern); i += w {
+	b.Grow(len(pattern) + n)
+	var prev, curr, next rune
+	i, width := 0, 0
+	for i < len(pattern) {
+		prev, _ = utf8.DecodeLastRuneInString(b.String())
+		curr, width = utf8.DecodeRuneInString(pattern[i:])
+		next, _ = utf8.DecodeRuneInString(pattern[i+width:])
+		i += width
+		if prev != '\\' && curr == '.' && (('a' <= next && next <= 'z') || ('A' <= next && next <= 'Z')) {
+			b.WriteString("\\.")
+		} else {
+			b.WriteRune(curr)
+		}
 	}
+	return b.String()
+}
+
+func compileRegexps(patterns []string) ([]*regexp.Regexp, error) {
+	if len(patterns) == 0 {
+		return nil, nil
+	}
+	regexps := make([]*regexp.Regexp, len(patterns))
+	buf := &bytes.Buffer{}
+	var err error
+	for i, pattern := range patterns {
+		if buf.Cap() < len(pattern) {
+			buf.Grow(len(pattern))
+		}
+		buf.Reset()
+		for j := 0; j < len(pattern); {
+			prev, _ := utf8.DecodeLastRune(buf.Bytes())
+			curr, width := utf8.DecodeRuneInString(pattern[j:])
+			next, _ := utf8.DecodeRuneInString(pattern[j+width:])
+			j += width
+			if prev != '\\' && curr == '.' && (('a' <= next && next <= 'z') || ('A' <= next && next <= 'Z')) {
+				buf.WriteString("\\.")
+			} else {
+				buf.WriteRune(curr)
+			}
+		}
+		regexps[i], err = regexp.Compile(buf.String())
+		if err != nil {
+			return regexps, err
+		}
+	}
+	return regexps, nil
 }
 
 func isDir(path string) bool {
