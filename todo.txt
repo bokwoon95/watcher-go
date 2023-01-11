@@ -1,6 +1,7 @@
 TODO:
 - type BuildCmd struct (https://github.com/cosmtrek/air/issues/365)
 - Signal sigint sighup sigterm sigquit ({Don't send SIGKILL} https://stackoverflow.com/a/690631)
+- Env read env vars from -env flag
 - CommandContext
 - Die with exit code if the command terminates; use
 - Root string - allows you to change the root where you want to start watching files. (https://github.com/cosmtrek/air/issues/40) (https://github.com/cosmtrek/air/issues/41) Will make regexp matching more complicated because it include
@@ -8,6 +9,9 @@ TODO:
 wf -dir assets -file .css tailwind build
 wf go run main.go
 wf -file '^this is a thing.txt$' psql -f this is a thing.txt
+wgo run main.go
+wgo -file .rs cargo test
+wgo -xdir ? run
 
 INVESTIGATE:
 - will terminating the command free up the port successfully? i.e. wf go run main.go
