@@ -1,5 +1,16 @@
+TODO:
 - type BuildCmd struct (https://github.com/cosmtrek/air/issues/365)
-- GracefulShutdown ({Don't send SIGKILL} https://stackoverflow.com/a/690631)
+- Signal sigint sighup sigterm sigquit ({Don't send SIGKILL} https://stackoverflow.com/a/690631)
+- CommandContext
+- Die with exit code if the command terminates; use
+- Root string - allows you to change the root where you want to start watching files. (https://github.com/cosmtrek/air/issues/40) (https://github.com/cosmtrek/air/issues/41) Will make regexp matching more complicated because it include
+
+wf -dir assets -file .css tailwind build
+wf go run main.go
+wf -file '^this is a thing.txt$' psql -f this is a thing.txt
+
+INVESTIGATE:
+- will terminating the command free up the port successfully? i.e. wf go run main.go
 - Multiple commands (https://github.com/cosmtrek/air/issues/160)
     Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList a, b, c; Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList d, e, f;
     wgo a b c &; wgo d e f &;
@@ -9,21 +20,12 @@
     How to do all of the above but in a docker container? With files inside the container linked to the native filesystem?
     Tutorial: https://dev.to/andreidascalu/setup-go-with-vscode-in-docker-for-debugging-24ch
     https://github.com/cosmtrek/air/issues/76#issuecomment-652867185
-- PollChanges; PollDuration - implement poller https://github.com/bep/hugo/blob/24ce98b6d10b2088af61c15112f5c5ed915a0c35/watcher/filenotify/poller.go
-- Set ulimit to 1024 on macOS if it's 256 (https://github.com/cosmtrek/air/issues/190#issuecomment-999254716)
+    Example guide for using wgo in docker and docker compose? https://github.com/cosmtrek/air/issues/54
+- PollChanges bool; PollDuration time.Duration - implement poller https://github.com/bep/hugo/blob/24ce98b6d10b2088af61c15112f5c5ed915a0c35/watcher/filenotify/poller.go
 - Check if wgo watch sh -c 'go build main && ./main' will terminate the server spawned by sh (make sure port :8080 is freed)
-
-switchChannel
-
-c.On()
-c.Off()
-<-c.Out()
-<-events.Out()
-type Channel
 
 var ignoreEvents int32
 var events chan fsnotify.Event
-
 go func() {
     for {
         select {
@@ -39,3 +41,21 @@ go func() {
         }
     }
 }()
+
+--
+https://anarc.at/blog/2019-11-20-file-monitoring-tools/#generic
+--
+https://github.com/oxequa/realize
+https://github.com/githubnemo/CompileDaemon
+https://github.com/gravityblast/fresh
+https://github.com/cespare/reflex
+https://github.com/cosmtrek/air
+https://github.com/cortesi/modd
+https://github.com/bokwoon95/wgo
+--
+entr
+fswatch
+watchexec
+watchman
+nodemon
+--

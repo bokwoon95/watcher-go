@@ -27,15 +27,6 @@ var buildFlags = [...]string{
 	"overlay", "pkgdir", "tags", "trimpath", "toolexec",
 }
 
-// TODO: wtf how is it possible to implement live reload with delve? https://github.com/cosmtrek/air/issues/76
-// TODO: ok fine I'll investigate running in docker https://dev.to/andreidascalu/setup-go-with-vscode-in-docker-for-debugging-24ch
-// TODO: there may come a day where people require reading files from outside the root directory for whatever reason https://github.com/cosmtrek/air/issues/41 (UGH fine, you can have your arbitrary file watching and rebuild server https://github.com/cosmtrek/air/issues/40 (Would it be possible to add include_dir which would be used instead of exclude_dir. We have a monolithic repository and it would be easiest to have it watch the root and only include directories the project needs. Thanks!))
-// TODO: okay, okay. generic project runner? if a file in /assets changes, rebuild using a custom command? https://github.com/cosmtrek/air/issues/14 (Note, a generic task runner means you would have to look into getting wgo into systems via package managers on windows, linux and macos... GoReleaser?)
-// NOTE: NO multiple commands and splicing with colorful sidebars like nodemon! The structure of a wgo run must be simple. Watch files, run server. Or watch files, build program. Or watch files, run arbitrary command. If you need to splice, compose it together using bash's support for background jobs and run multiple wgos in the same session.
-// TODO: figure out how to use wgo in Dockerfile + Docker Compose https://github.com/cosmtrek/air/issues/54
-// TODO: use CommandContext and runCmd.Stop() should propogate cancellation to underlying build and run commands https://github.com/cosmtrek/air/issues/127
-// TODO: probably add a wgo dlv to rerun dlv on file change. need to figure out how dlv runs headlessly and how clients connect to it (which clients? goland?) https://github.com/cosmtrek/air/issues/216#issuecomment-982348931 (https://github.com/cosmtrek/air/issues/241)
-// NOTE: There's a fine line between what wgo does and what nodemon does. wgo is as convenient as it is because it knows/can control the output programPath to run with for the Go language. But other task runners usually require running a custom command. Maybe wgo watch [FLAGS...] <path> -- <command> [ARGS...]? What about using stdin to pipe in a newline separated list of files? Don't ask users to fuck around with esoteric find flags?
 type RunCmd struct {
 	// (Required)
 	Package                string
@@ -389,15 +380,19 @@ func addDirsRecursively(watcher *fsnotify.Watcher, watched map[string]struct{}, 
 			return nil
 		}
 		basename := filepath.Base(path)
+		if basename == ".git" || basename == ".hg" || basename == ".idea" || basename == ".vscode" || basename == ".settings" {
+			return filepath.SkipDir
+		}
+		normalizedPath := filepath.ToSlash(path)
 		for _, r := range excludeDirRegexps {
-			if r.MatchString(basename) {
+			if r.MatchString(normalizedPath) {
 				return filepath.SkipDir
 			}
 		}
 		if len(dirRegexps) > 0 {
 			matched := false
 			for _, r := range dirRegexps {
-				if r.MatchString(basename) {
+				if r.MatchString(normalizedPath) {
 					matched = true
 					break
 				}
