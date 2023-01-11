@@ -165,9 +165,9 @@ Flags:
 }
 
 func (cmd *RunCmd) Start() {
-	// Prevent Start() from running more than once by ignoring subsequent calls
-	// to Start().
 	if !atomic.CompareAndSwapInt32(&cmd.started, 0, 1) {
+		// Start() should only run once, subsequent calls to Start() are
+		// ignored.
 		return
 	}
 	if cmd.Stdin == nil {
@@ -291,8 +291,8 @@ func (cmd *RunCmd) Start() {
 }
 
 func (cmd *RunCmd) Stop() {
-	// Do nothing if Start() hasn't yet been called.
 	if atomic.LoadInt32(&cmd.started) == 0 {
+		// If Start() hasn't been called, do nothing.
 		return
 	}
 	if cmd.watcher != nil {
