@@ -312,7 +312,7 @@ func compileRegexps(patterns []string) ([]*regexp.Regexp, error) {
 	var err error
 	for i, pattern := range patterns {
 		if strings.Count(pattern, ".") == 0 {
-			regexps[i], err = regexp.Compile(buf.String())
+			regexps[i], err = regexp.Compile(pattern)
 			if err != nil {
 				return regexps, err
 			}
