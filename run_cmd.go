@@ -27,12 +27,6 @@ var buildFlags = [...]string{
 	"overlay", "pkgdir", "tags", "trimpath", "toolexec",
 }
 
-// TODO: StartService bool, which checks if the output binary already exists and runs that first (and then waiting on the file even loop). https://github.com/cosmtrek/air/issues/126 Idea is to retain the oldProgramPath, build a new programPath and if it succeeds then run the new programPath and cleanup the oldProgramPath otherwise leave the oldProgramPath running.
-// TODO: PropagateSigint bool, which propagates SIGINT to the underlying binary in a exponential backoff retry loop until it's done or until 10 tries have been up at which point the service is forcibly killed. https://github.com/cosmtrek/air/pull/49 But sometimes people may want a hard cap on the time waited, so provide an option for that as well. With this option it will be possible to use wgo to run servers in production, together with the feature of falling back on the old binary in case the new build fails. https://github.com/cosmtrek/air/issues/129 Do NOT do any SMTP mail handling because build failure notifications is a job for a proper CI/CD system. (Wow people may actually like exponential backoff retry huh if their app takes fucking ages to close down after sigkill. what's the difference between sigkill and sigint and sigterm and sighup? https://github.com/cosmtrek/air/issues/29)
-// TODO: experiment if bash backgroundjobs & can multiplex multiple wgo calls in one stdout. https://github.com/cosmtrek/air/issues/160
-// TODO: add disclaimer saying I don't work with Docker and I dont know shit about virtual filesystems or how fsnotify works so if you file a report I likely can't help you until someone kind enough does.
-// TODO: test if wgo handles port :8080 just fine (and maybe try it on a remote box and see if it's reachable from outside). Since apparently that's what people do on live, they use air to live-compile their codebase on the server so that they can just push and see changes immediately. Means need to try git pulling and seeing if wgo automatically picks it up and recompiles the app. That also means need an option to fall back on the old binary in case the new build fails (can't just os.Remove before building, need a different flow). https://github.com/cosmtrek/air/issues/311
-// TODO: does calling Fatal in an application not free up a port while wgo is running? Should I kill wgo if no build program is running? Liveliness checks? Too much for wgo? https://github.com/cosmtrek/air/issues/116 (I'm leaning towards killing wgo if the underlying program dies on its own, so that orchestrators can detect that wgo is dead and spin up another instance https://github.com/cosmtrek/air/issues/353)
 // TODO: wtf how is it possible to implement live reload with delve? https://github.com/cosmtrek/air/issues/76
 // TODO: ok fine I'll investigate running in docker https://dev.to/andreidascalu/setup-go-with-vscode-in-docker-for-debugging-24ch
 // TODO: there may come a day where people require reading files from outside the root directory for whatever reason https://github.com/cosmtrek/air/issues/41 (UGH fine, you can have your arbitrary file watching and rebuild server https://github.com/cosmtrek/air/issues/40 (Would it be possible to add include_dir which would be used instead of exclude_dir. We have a monolithic repository and it would be easiest to have it watch the root and only include directories the project needs. Thanks!))
@@ -301,6 +295,10 @@ func (cmd *RunCmd) Stop() {
 	if cmd.programPath != "" {
 		_ = os.Remove(cmd.programPath)
 	}
+}
+
+func (cmd *RunCmd) Run() (exitCode int) {
+	return 0
 }
 
 func compileRegexps(patterns []string) ([]*regexp.Regexp, error) {

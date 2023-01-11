@@ -1,37 +1,41 @@
-type BuildCmd struct (https://github.com/cosmtrek/air/issues/365)
+- type BuildCmd struct (https://github.com/cosmtrek/air/issues/365)
+- GracefulShutdown ({Don't send SIGKILL} https://stackoverflow.com/a/690631)
+- Multiple commands (https://github.com/cosmtrek/air/issues/160)
+    Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList a, b, c; Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList d, e, f;
+    wgo a b c &; wgo d e f &;
+- How to connect to delve running headlessly?
+    How to reload delve debugger every time a file changes?
+    Is it possible for the headless delve process to restart without having to restart the client? (e.g. another delve instance or Goland) (    https://github.com/cosmtrek/air/issues/76#issuecomment-683441096)
+    How to do all of the above but in a docker container? With files inside the container linked to the native filesystem?
+    Tutorial: https://dev.to/andreidascalu/setup-go-with-vscode-in-docker-for-debugging-24ch
+    https://github.com/cosmtrek/air/issues/76#issuecomment-652867185
+- PollChanges; PollDuration - implement poller https://github.com/bep/hugo/blob/24ce98b6d10b2088af61c15112f5c5ed915a0c35/watcher/filenotify/poller.go
+- Set ulimit to 1024 on macOS if it's 256 (https://github.com/cosmtrek/air/issues/190#issuecomment-999254716)
+- Check if wgo watch sh -c 'go build main && ./main' will terminate the server spawned by sh (make sure port :8080 is freed)
 
-wgo ls -include ... -exclude ... # print watched files and dirs
+switchChannel
 
-dlv --listen=:2345 --headless=true --api-version=2 exec ./myApp
+c.On()
+c.Off()
+<-c.Out()
+<-events.Out()
+type Channel
 
-on file change, run a battery of test commands
+var ignoreEvents int32
+var events chan fsnotify.Event
 
-Powershell run multiple commands and print to console:
-Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList a, b, c;
-Start-Process -NoNewWindow -FilePath wgo.exe -ArgumentList d, e, f;
-
-Bash run multiple commands and print to console:
-wgo a b c &;
-wgo d e f &;
-
-wgo -include '\.go$' -exclude 'node_modules'
-
--dir
--file
--filepath
--xdir
--xfile
--xfilepath
-
--xdir 'node_modules'
-
--xdir '.idea'
-
--file .go -file .html -file
-
--file .js$
--xdir node_modules$
-
-only root files: -xfilepath '.*/.*'
--xfilepath / -file .go -file .html
--xfile _test.go$
+go func() {
+    for {
+        select {
+        case event, ok := <-watcher.Events:
+            if !ok {
+                close(events)
+                return
+            }
+            if atomic.LoadInt32(&ignoreEvents) == 1 {
+                continue
+            }
+            events <- event
+        }
+    }
+}()
