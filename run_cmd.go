@@ -208,12 +208,12 @@ func (cmd *RunCmd) Start() {
 	// Clean + Build + Run cycle.
 	for {
 		// Clean up the program (if exists) and any child processes.
-		if program != nil {
+		if program != nil && program.Process != nil {
 			cleanup(program)
 		}
 		// Set the program to nil; it will be non-nil if buildCmd succeeds
 		// without error.
-		program = nil
+		// program = nil // if we're checking program.Process we don't need to set program to nil anymore to indicate the command has stopped.
 		// Build the program (piping its stdout and stderr to cmd.Stdout and
 		// cmd.Stderr).
 		buildCmd := exec.Command("go", buildArgs...)
@@ -221,6 +221,7 @@ func (cmd *RunCmd) Start() {
 		buildCmd.Stdout = cmd.Stdout
 		buildCmd.Stderr = cmd.Stderr
 		err = buildCmd.Run()
+		// if errors.Is(err, context.Cancelled) || errors.Is(err, context.DeadlineExceeded) { return }
 		if err == nil {
 			// Run the program in the background (piping its stdout and stderr to
 			// cmd.Stdout and cmd.Stderr).
@@ -242,6 +243,13 @@ func (cmd *RunCmd) Start() {
 				fmt.Fprintln(cmd.Stderr, err)
 			case event, ok := <-watcher.Events:
 				if !ok {
+					// TODO: cleanup(program) if program is running, otherwise
+					// we are forcibly ending main() and killing the goroutine
+					// (potentially not letting the server do its cleanup).
+					// TODO: instead of returning here, craft our own <-done:
+					// channel to make it really clear how this loop is
+					// exiting. Then we don't have to check for the zero value
+					// from the events channel or whatever.
 					return // cmd.Stop() was called which called watcher.Close().
 				}
 				// We're only interested in Create | Write | Remove events,
