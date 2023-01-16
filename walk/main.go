@@ -23,6 +23,7 @@ func main() {
 		fmt.Println(filepath.ToSlash(path))
 		return nil
 	})
+	fmt.Println(os.Getenv("bruh"))
 	//https://stackoverflow.com/questions/17817204/how-to-set-ulimit-n-from-a-golang-program 
 	// var rLimit syscall.Rlimit
 	// err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &rLimit)

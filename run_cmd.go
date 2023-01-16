@@ -226,7 +226,7 @@ func (cmd *RunCmd) Start() {
 			// Run the program in the background (piping its stdout and stderr to
 			// cmd.Stdout and cmd.Stderr).
 			program = exec.Command(cmd.programPath, cmd.Args...)
-			program.Env = cmd.Env
+			program.Env = []string{"bruh='hehe'"}
 			program.Stdin = cmd.Stdin
 			program.Stdout = cmd.Stdout
 			program.Stderr = cmd.Stderr
